@@ -1,0 +1,176 @@
+JDK动态代理基于接口：
+由于代理对象和被代理对象唯一能产生关系的是他们实现了共同的接口，如果某个类没有接口，意味着这个类不能创建代理对象。
+
+测试SpringAOP在何时使用JDK动态代理在何时使用CGLIB动态代理
+
+首先手写实现一个JDK动态代理：
+1.明确JDK动态代理是基于接口对象，如果一个类没有任何接口它将不能创建代理对象
+ public interface MathCaculator {
+     int add(int i, int j);
+     int sub(int i, int j);
+     int mul(int i, int j);
+     int div(int i, int j);
+ }
+
+ public class MyMathCalculator {
+     @Override
+     public int add(int i, int j) {
+         return i+j;
+     }
+     @Override
+     public int sub(int i, int j) {
+         return i-j;
+     }
+     @Override
+     public int mul(int i, int j) {
+         return i*j;
+     }
+     @Override
+     public int div(int i, int j) {
+         return i/j;
+     }
+ }
+
+ public class JdkProxyFactory {
+
+     public static MathCaculator getProxy(MyMathCalculator myMathCalculator) {
+         /*
+          * @Author GhostGalaxy
+          * @Description  ClassLoader loader, 当前类的类加载器
+                          Class<?>[] interfaces, 被代理对象实现的接口
+                          InvocationHandler h  用于执行被代理类的目标目标
+          * @Date 18:57:42 2022/11/24
+          * @Param [myMathCalculator]
+          * @return void
+          **/
+         MathCaculator CaculateProxy = (MathCaculator) Proxy.newProxyInstance(myMathCalculator.getClass().getClassLoader(), myMathCalculator.getClass().getInterfaces(), new InvocationHandler() {
+             /*
+              * @Author GhostGalaxy
+              * @Description     Object proxy:代理对象 主要给jdk使用
+              *                  Method method 被代理对象的方法名
+              *                  Object[] args 被代理对象的方法参数列表
+              * @Date 18:59:35 2022/11/24
+              * @Param [proxy, method, args]
+              * @return java.lang.Object
+              **/
+             @Override
+             public Object invoke(Object proxy, Method method, Object[] args){
+                 System.out.println("======将要执行的方法的名称为======>" + method.getName() + "======即将要执行的方法的参数为======>" + Arrays.asList(args));
+                 Object result = null;
+                 try {
+                     System.out.println("目标方法执行前");
+                     result = method.invoke(myMathCalculator, args);
+                 } catch (Exception e) {
+                     System.out.println("=======方法执行发生异常，异常的类型为：========>" + e.getCause());
+                 } finally {
+                     System.out.println("方法执行完成");
+                 }
+                 return result ;
+             }
+         });
+         return CaculateProxy;
+     }
+ }
+
+ @ContextConfiguration(locations = "classpath:application.xml")
+ @RunWith(SpringJUnit4ClassRunner.class)
+ public class ProxyLogTest {
+     @Test
+     public void caculateLog(){
+
+         MyMathCalculator myMathCalculator = new MyMathCalculator();
+         //注意这里使用接口去接受，如果使用具体的实现类出现转换异常 由于代理对象和被代理对象唯一能产生关系的是他们实现了共同的接口
+         MathCaculator proxy = JdkProxyFactory.getProxy(myMathCalculator);
+         //class com.sun.proxy.$Proxy14
+         System.out.println(proxy.getClass());
+
+         System.out.println(proxy.getClass().getSuperclass());
+         //[interface com.itheima.math.MathCaculator]
+         System.out.println(Arrays.asList(proxy.getClass().getInterfaces()));
+         int add = proxy.add(1, 2);
+
+     }
+
+ }
+
+ 接下来出触发Spring使用CGlab动态代理
+ 前提：CGlab动态代理基于父子类，代理类作为被代理对象的之类存在
+
+@Service //注意要使用SpringAOP，首先必须将资源纳入SpringIOC管理
+public class MyMathCalculator {  //注意此类没有实现任何接口
+    //@Override
+    public int add(int i, int j) {
+        return i+j;
+    }
+
+    //@Override
+    public int sub(int i, int j) {
+        return i-j;
+    }
+
+    //@Override
+    public int mul(int i, int j) {
+        return i*j;
+    }
+
+    //@Override
+    public int div(int i, int j) {
+        return i/j;
+    }
+}
+@Component
+//定义该类为一个切面资源类
+@Aspect
+public class LogUtils {
+    @Before("execution(public int com.itheima.math.MyMathCalculator.add(int,int))")
+    public void methodStart(){
+        System.out.println("目标方法执行前");
+    }
+    public void methodRunning(){
+        System.out.println("目标方法执行中");
+    }
+    public void methodException(){
+        System.out.println("目标方法执行发生异常");
+    }
+    public void methodEnd(){
+        System.out.println("目标方法执行结束");
+    }
+}
+@ContextConfiguration(locations = "classpath:application.xml")
+@RunWith(SpringJUnit4ClassRunner.class)
+public class CGlibProxyTest {
+    @Test
+    public void caculateLog(){
+        ClassPathXmlApplicationContext classPathXmlApplicationContext = new ClassPathXmlApplicationContext("application.xml");
+        MyMathCalculator bean =classPathXmlApplicationContext.getBean(MyMathCalculator.class);
+        //此处由于有切面逻辑，必然产生的不是简单对象，而是代理对象，
+        //class com.itheima.math.MyMathCalculator$$EnhancerBySpringCGLIB$$2b03b9be 可以发现是基于CGlib的代理方式
+        System.out.println(bean.getClass());
+
+        int add = bean.add(1, 2);
+
+    }
+}
+发现此时MyMathCalculator没有实现接口，且执行了切面逻辑，代理对象通过CGLIB代理方式产生。
+实质上AOP的底层包含基于JDK动态代理和CGlib动态代理，结论就是，当某个类有接口实现时，他就满足了JDK动态代理的条件，就会走JDK动态代理，如果说一个类没有实现任何接口，
+它就会走CGLIB动态代理。
+
+如果我们在编写类的时候这个类实现了某个接口，
+@Service
+public class MyMathCalculator implements MathCaculator{
+    @Override
+    public int add(int i, int j) {
+        return i+j;
+    }
+    }
+那么从Spring容器中获取对象的时候如果根据类型获取将报NoSuchBeanDefinitionException: No qualifying bean of type 'com.itheima.math.MyMathCalculator' available异常
+原因是，基于接口走了JDK动态代理产生代理对象，此代理对象和被代理对象已经不是一个类型，而在单例容器中保存的是代理对象，而不是被代理对象，这样如果通过代理对象的类型去容器中找Bean将
+找不到。前面讲到基于JDK的代理对象和被代理对象的唯一联系是接口，因此这里如果要根据类型从容器中获取Bean，必须通过接口类型。
+
+此时又有一个疑虑，我的接口上并未标注任何注解，Spring是如何根据接口类型获取到代理对象的呢？
+实质上IOC只是根据接口类型找相同的类型的组件，并不能在接口上增加注解，实质接口也不能创建实例。如果接口加注解，注解失效，Spring不报错。
+
+如果没有接口实现，就走CGlib，CGLIb是基于父子类  根据返回的类型class com.itheima.math.MyMathCalculator$$EnhancerBySpringCGLIB$$2b03b9be就可以看出
+CGlib代理作为内部内存在，所以可以通过类型直接从SpringIOC容器中获取。
+
+

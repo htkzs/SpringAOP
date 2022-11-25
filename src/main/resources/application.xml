@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd http://www.springframework.org/schema/context https://www.springframework.org/schema/context/spring-context.xsd">
+       <context:component-scan base-package="com.itheima" use-default-filters="true">
+              <context:exclude-filter type="assignable" expression="com.itheima.proxy.JdkProxyFactory"/>
+       </context:component-scan>
+       <!--开启AOP对注解的支持
+              1、将目标类和切面类都加入到ioc容器中。@Component
+              2、告诉Spring哪个是切面类。@Aspect
+              3、在切面类中使用五个通知注解来配置切面中的这些通知方法都何时何地运行
+              4、开启基于注解的AOP功能
+       -->
+       <aop:aspectj-autoproxy/>
+
+       <!--基于XML方式的SpringAOP配置-->
+       <!--将切面类和被切面的资源先纳入到Spring管理-->
+       <bean id="logUtils" class="com.itheima.log.LogUtils"/>
+       <bean id="dataValidation" class="com.itheima.aspect.DataValidation"/>
+       <bean id="myMathCalculator" class="com.itheima.math.MyMathCalculator"/>
+
+       <aop:config>
+              <!--相当于声明该类为一个切面类 @Aspect-->
+              <aop:aspect ref="dataValidation">
+                     <aop:pointcut id="myPointCut" expression="execution(public * com.itheima.math.MyMathCalculator.add(..))"/>
+                     <aop:before method="methodStart" pointcut="execution(public int com.itheima.math.MyMathCalculator.add(int,int))"/>
+                     <aop:after-returning method="methodReturn" pointcut-ref="myPointCut" returning="obj"/>
+                     <aop:after-throwing method="methodException" pointcut-ref="myPointCut" throwing="e"/>
+                     <aop:after method="methodAfter" pointcut-ref="myPointCut"/>
+              </aop:aspect>
+       </aop:config>
+
+       <context:property-placeholder location="classpath:jdbc.properties"/>
+       <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+              <property name="driverClass" value="${jdbc.driver}"/>
+              <property name="jdbcUrl" value="${jdbc.url}"/>
+              <property name="user" value="${jdbc.username}"/>
+              <property name="password" value="${jdbc.password}"/>
+       </bean>
+
+       <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+              <constructor-arg name="dataSource" ref="dataSource"/>
+       </bean>
+
+       <!--注入一个支持具名参数的JdbcTemplate-->
+       <bean id="namedParameterJdbcTemplate" class="org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate">
+              <constructor-arg ref="dataSource" name="dataSource"/>
+       </bean>
+
+
+</beans>
